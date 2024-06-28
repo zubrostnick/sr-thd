@@ -54,6 +54,54 @@ def srcnn_predict(image_path, upscale_factor=2):
     return full_image, HR_image
 
 
+def edsr_predict(image_path, upscale_factor=2):
+    """
+    Applies the EDSR model to the input image for super-resolution.
+
+    Parameters:
+        image_path (str): The path to the input image file.
+        upscale_factor (int, optional): The factor by which the image will be upscaled. Defaults to 2.
+
+    Returns:
+        numpy.ndarray: The high-resolution image obtained after applying the EDSR model.
+    """
+    edsr_model = tf.keras.models.load_model("./src/models_saved/edsr_model.tf")  # load model
+
+    full_image = cv2.imread(image_path)
+
+    # normalize and convert to float32
+    width = full_image.shape[1]
+    height = full_image.shape[0]
+    img = full_image
+
+    float_image = img.astype(np.float32) / 255.0
+    imgYCbCr = cv2.cvtColor(float_image, cv2.COLOR_BGR2YCrCb)
+    imgY = imgYCbCr[:, :, 0]
+    imgY_upscaled = cv2.resize(imgY, (width * upscale_factor, height * upscale_factor), interpolation=cv2.INTER_CUBIC)
+    imgY_upscaled = np.expand_dims(imgY_upscaled, axis=2)
+
+    LR_input_ = imgY_upscaled.reshape(1, imgY_upscaled.shape[0], imgY_upscaled.shape[1], 1)
+
+    Y = edsr_model.predict([LR_input_])[0]
+
+    Y = Y.clip(0, 1)
+
+    # upscale Cr and Cb channels using the same dimensions as Y
+    Cr = np.expand_dims(cv2.resize(imgYCbCr[:, :, 1], (Y.shape[1], Y.shape[0]), interpolation=cv2.INTER_CUBIC), axis=2)
+    Cb = np.expand_dims(cv2.resize(imgYCbCr[:, :, 2], (Y.shape[1], Y.shape[0]), interpolation=cv2.INTER_CUBIC), axis=2)
+
+    # concatenate Y, Cr, and Cb channels
+    HR_image_YCrCb = np.concatenate((Y, Cr, Cb), axis=2)
+
+    # convert YCrCb to BGR
+    HR_image = cv2.cvtColor(HR_image_YCrCb, cv2.COLOR_YCrCb2BGR)
+
+    # scale to 0-255 and convert to uint8
+    HR_image = (HR_image * 255.0).clip(min=0, max=255).astype(np.uint8)
+
+    return full_image, HR_image
+
+
 class SuperResolutionApp:
     def __init__(self, root):
         self.root = root
@@ -109,7 +157,13 @@ class SuperResolutionApp:
 
     def upscale_image(self):
         if self.image_path:
-            low_res_image, upscaled_image = srcnn_predict(self.image_path)
+            if self.model_selector.get() == "srcnn":
+                low_res_image, upscaled_image = srcnn_predict(self.image_path)
+            elif self.model_selector.get() == "edsr":
+                low_res_image, upscaled_image = edsr_predict(self.image_path)
+            else:
+                messagebox.showwarning("Warning", "Please choose a valid model.")
+                return
             self.display_image(upscaled_image)
         else:
             messagebox.showwarning("Warning", "Please choose an image first.")
@@ -120,6 +174,10 @@ def instantiate_window():
 
     root.title(WINDOW_TITLE)
     root.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
+
+    # load and set the window icon
+    logo = tk.PhotoImage(file="./assets/logo.png")
+    root.iconphoto(False, logo)
 
     app = SuperResolutionApp(root)
 
