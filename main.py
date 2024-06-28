@@ -124,7 +124,7 @@ class SuperResolutionApp:
         self.btn_upscale.grid(row=0, column=2, padx=5, pady=5)
 
         # add matplotlib figure
-        self.figure = Figure(figsize=(10, 5), dpi=100)
+        self.figure = Figure(figsize=(20, 10), dpi=100)
         self.canvas = FigureCanvasTkAgg(self.figure, master=root)
         self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
 
