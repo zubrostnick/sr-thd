@@ -54,6 +54,44 @@ def srcnn_predict(image_path, upscale_factor=2):
     return full_image, HR_image
 
 
+def vdsr_predict(image_path, upscale_factor=2):
+    """
+    Applies the VDSR model to the input image for super-resolution.
+
+    Parameters:
+        image_path (str): The path to the input image file.
+        upscale_factor (int, optional): The factor by which the image will be upscaled. Defaults to 2.
+
+    Returns:
+        numpy.ndarray: The high-resolution image obtained after applying the VDSR model.
+    """
+    srcnn_model = tf.keras.models.load_model("./src/models_saved/vdsr_model.tf")  # load model
+
+    full_image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+
+    # normalize and convert to float32
+    float_img = full_image.astype(np.float32) / 255.0
+    imgYCbCr = cv2.cvtColor(float_img, cv2.COLOR_BGR2YCrCb)
+    imgY = imgYCbCr[:, :, 0]
+    imgY = np.expand_dims(cv2.resize(imgYCbCr[:, :, 0], None, fx=upscale_factor, fy=upscale_factor, interpolation=cv2.INTER_CUBIC),
+                          axis=2)
+    
+    LR_input_ = imgY.reshape(1, imgY.shape[0], imgY.shape[1], 1)
+
+    Y = srcnn_model.predict([LR_input_])[0]
+    Cr = np.expand_dims(cv2.resize(imgYCbCr[:, :, 1], None, fx=upscale_factor, fy=upscale_factor, interpolation=cv2.INTER_CUBIC),
+                        axis=2)
+    Cb = np.expand_dims(cv2.resize(imgYCbCr[:, :, 2], None, fx=upscale_factor, fy=upscale_factor, interpolation=cv2.INTER_CUBIC),
+                        axis=2)
+    HR_image_YCrCb = np.concatenate((Y, Cr, Cb), axis=2)
+
+    # convert back to BGR and uint8
+    HR_image = cv2.cvtColor(HR_image_YCrCb, cv2.COLOR_YCrCb2BGR)
+    HR_image = (HR_image * 255.0).clip(0, 255).astype(np.uint8)
+
+    return full_image, HR_image
+
+
 def edsr_predict(image_path, upscale_factor=2):
     """
     Applies the EDSR model to the input image for super-resolution.
@@ -161,6 +199,8 @@ class SuperResolutionApp:
                 low_res_image, upscaled_image = srcnn_predict(self.image_path)
             elif self.model_selector.get() == "edsr":
                 low_res_image, upscaled_image = edsr_predict(self.image_path)
+            elif self.model_selector.get() == "vdsr":
+                low_res_image, upscaled_image = vdsr_predict(self.image_path)
             else:
                 messagebox.showwarning("Warning", "Please choose a valid model.")
                 return
